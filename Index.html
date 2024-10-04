@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Da Duck Chess Engine</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            background: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 60px);
+            margin: 20px;
+            border: 2px solid #333;
+            border-radius: 5px;
+        }
+        .square {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 32px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .light { background: #f9f9f9; }
+        .dark { background: #7a7a7a; color: white; }
+        .selected { background: #ffeb3b; }
+        #info {
+            margin-top: 20px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Da Duck Chess Engine</h1>
+<div id="board"></div>
+<div id="info">Select a piece to move!</div>
+
+<script>
+    const boardElement = document.getElementById('board');
+    const infoElement = document.getElementById('info');
+    const pieces = {
+        r: '♖', n: '♘', b: '♗', q: '♕', k: '♔', p: '♙',
+        R: '♜', N: '♞', B: '♟', Q: '♛', K: '♚', P: '♟',
+    };
+
+    let initialBoard = [
+        'rnbqkbnr',
+        'pppppppp',
+        '        ',
+        '        ',
+        '        ',
+        '        ',
+        'PPPPPPPP',
+        'RNBQKBNR'
+    ];
+
+    let currentBoard = JSON.parse(JSON.stringify(initialBoard));
+    let selectedSquare = null;
+    let currentTurn = 'white'; // Start with white's turn
+
+    function setupBoard() {
+        boardElement.innerHTML = '';
+        currentBoard.forEach((row, i) => {
+            row.split('').forEach((piece, j) => {
+                const square = document.createElement('div');
+                square.className = 'square ' + ((i + j) % 2 === 0 ? 'light' : 'dark');
+                square.textContent = pieces[piece] || '';
+                square.dataset.position = `${i}-${j}`;
+                square.addEventListener('click', handleSquareClick);
+                boardElement.appendChild(square);
+            });
+        });
+    }
+
+    function handleSquareClick(event) {
+        const square = event.target;
+        const position = square.dataset.position;
+
+        if (selectedSquare) {
+            const fromPos = selectedSquare.dataset.position;
+            if (isValidMove(fromPos, position)) {
+                makeMove(fromPos, position);
+                selectedSquare.classList.remove('selected');
+                selectedSquare = null;
+                infoElement.textContent = "Select a piece to move!";
+                currentTurn = currentTurn === 'white' ? 'black' : 'white'; // Switch turns
+            } else {
+                infoElement.textContent = "Invalid move!";
+            }
+        } else {
+            if (square.textContent && (currentTurn === 'white' ? square.textContent === pieces[square.textContent.toLowerCase()] : square.textContent === pieces[square.textContent.toUpperCase()])) {
+                selectedSquare = square;
+                selectedSquare.classList.add('selected');
+                infoElement.textContent = `Selected: ${square.textContent}`;
+            }
+        }
+    }
+
+    function isValidMove(from, to) {
+        const [fromRow, fromCol] = from.split('-').map(Number);
+        const [toRow, toCol] = to.split('-').map(Number);
+        const piece = currentBoard[fromRow][fromCol];
+        const targetPiece = currentBoard[toRow][toCol];
+
+        // Check if moving to an empty square or capturing an opponent's piece
+        if (targetPiece !== ' ' && (piece === piece.toLowerCase()) === (targetPiece === targetPiece.toLowerCase())) {
+            return false; // Can't capture own piece
+        }
+
+        // Basic movement validation based on piece type
+        switch (piece.toLowerCase()) {
+            case 'p':
+                const direction = piece === 'p' ? -1 : 1; // White pawns move up (-1), Black pawns move down (+1)
+                if (fromCol === toCol && targetPiece === ' ' && (toRow - fromRow === direction)) {
+                    return true; // Move one forward
+                }
+                if (fromCol === toCol && targetPiece === ' ' && (toRow - fromRow === 2 * direction && fromRow === (piece === 'p' ? 6 : 1))) {
+                    return true; // Move two forward from starting position
+                }
+                if (Math.abs(fromCol - toCol) === 1 && (toRow - fromRow === direction) && targetPiece !== ' ') {
+                    return true; // Capture
+                }
+                break;
+            case 'r':
+                if (fromRow === toRow || fromCol === toCol) {
+                    return isPathClear(fromRow, fromCol, toRow, toCol);
+                }
+                break;
+            case 'n':
+                if ((Math.abs(fromRow - toRow) === 2 && Math.abs(fromCol - toCol) === 1) ||
+                    (Math.abs(fromRow - toRow) === 1 && Math.abs(fromCol - toCol) === 2)) {
+                    return true;
+                }
+                break;
+            case 'b':
+                if (Math.abs(fromRow - toRow) === Math.abs(fromCol - toCol)) {
+                    return isPathClear(fromRow, fromCol, toRow, toCol);
+                }
+                break;
+            case 'q':
+                if (Math.abs(fromRow - toRow) === Math.abs(fromCol - toCol) || fromRow === toRow || fromCol === toCol) {
+                    return isPathClear(fromRow, fromCol, toRow, toCol);
+                }
+                break;
+            case 'k':
+                if (Math.abs(fromRow - toRow) <= 1 && Math.abs(fromCol - toCol) <= 1) {
+                    return true;
+                }
+                break;
+        }
+        return false;
+    }
+
+    function isPathClear(fromRow, fromCol, toRow, toCol) {
+        const rowStep = (toRow - fromRow) ? (toRow - fromRow) / Math.abs(toRow - fromRow) : 0;
+        const colStep = (toCol - fromCol) ? (toCol - fromCol) / Math.abs(toCol - fromCol) : 0;
+
+        let r = fromRow + rowStep;
+        let c = fromCol + colStep;
+        while (r !== toRow || c !== toCol) {
+            if (currentBoard[r][c] !== ' ') {
+                return false; // Path is blocked
+            }
+            r += rowStep;
+            c += colStep;
+        }
+        return true; // Path is clear
+    }
+
+    function makeMove(from, to) {
+        const [fromRow, fromCol] = from.split('-').map(Number);
+        const [toRow, toCol] = to.split('-').map(Number);
+        const piece = currentBoard[fromRow][fromCol];
+
+        // Move the piece
+        currentBoard[toRow][toCol] = piece;
+        currentBoard[fromRow][fromCol] = ' ';
+        setupBoard();
+    }
+
+    setupBoard();
+</script>
+
+</body>
+</html>
